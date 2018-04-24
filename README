@@ -60,3 +60,6 @@ Get up and running quickly:
     $ make
     # make install
     # ldconfig
+
+
+install lbsnappy-dev if ld doesn't find -lsnappy error found 
