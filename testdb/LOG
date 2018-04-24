@@ -1,0 +1,8 @@
+2018/04/24-02:01:59.983209 c018c0 Recovering log #6
+2018/04/24-02:02:00.012172 c018c0 Level-0 table #8: 159 bytes OK
+2018/04/24-02:02:00.042524 c018c0 Delete type=0 #6
+2018/04/24-02:02:00.042573 c018c0 Delete type=3 #4
+2018/04/24-02:02:00.042659 7fcc69421700 Compacting 2@0 + 0@1 files for guards in a level
+2018/04/24-02:02:00.042814 7fcc69421700 compacted to: files[ 2 0 0 0 0 0 0 ]
+2018/04/24-02:02:00.042843 7fcc69421700 cleaning up CompactLevelThread
+2018/04/24-02:02:00.042873 7fcc69c22700 cleaning up CompactMemTableThread

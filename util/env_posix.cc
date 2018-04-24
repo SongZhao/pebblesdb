@@ -199,6 +199,25 @@ class PosixWritableFile : public WritableFile {
     }
   }
 
+   virtual Status PunchHole(uint64_t offset, uint64_t len) {
+    Status s;
+    int ret = fallocate(fileno(file_), 0x02|0x01, offset, len);   
+    if (ret == 0)
+      return Status::OK();
+    else {
+      fprintf(stdout, "punch hole failed !! \n");
+      return IOError(filename_, -1);
+    }
+  }
+
+  //ll: code; seek to an offset 
+  virtual Status SeekToOffset(uint64_t n) {
+    if (fseek(file_, n, SEEK_SET)) {
+      return IOError(filename_, errno);
+    }
+    return Status::OK();
+  }
+
   virtual Status Append(const Slice& data) {
     size_t r = fwrite_unlocked(data.data(), 1, data.size(), file_);
     if (r != data.size()) {

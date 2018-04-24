@@ -62,6 +62,19 @@ class Env {
   virtual Status NewRandomAccessFile(const std::string& fname,
                                      RandomAccessFile** result) = 0;
 
+  //ll: code; my class for vlog file read 
+  // Create a brand new random access read-only file with the
+  // specified name.  On success, stores a pointer to the new file in
+  // *result and returns OK.  On failure stores NULL in *result and
+  // returns non-OK.  If the file does not exist, returns a non-OK
+  // status.
+  //
+  // The returned file may be concurrently accessed by multiple threads.
+  virtual Status NewReadAccessFile(const std::string& fname,
+				   RandomAccessFile** result, bool random) = 0;
+
+
+
   // Create an object that writes to a new file with the specified
   // name.  Deletes any existing file with the same name and creates a
   // new file.  On success, stores a pointer to the new file in
@@ -236,6 +249,9 @@ class WritableFile {
  public:
   WritableFile() { }
   virtual ~WritableFile();
+  //ll
+  virtual Status SeekToOffset(uint64_t n) = 0; // seek to an offset 
+  virtual Status PunchHole(uint64_t offset, uint64_t len) = 0; //punch a hole  
 
   // REQUIRES:  external synchronization
   virtual Status Append(const Slice& data) = 0;

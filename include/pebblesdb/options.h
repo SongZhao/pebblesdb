@@ -144,7 +144,7 @@ struct Options {
   // can get a snapshot.
   //
   // Default: false/no.
-  bool manual_garbage_collection;
+  bool mgc;
 
   // Create an Options object with default values for all fields.
   Options();

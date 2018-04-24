@@ -1,0 +1,6 @@
+2018/04/24-01:51:25.933109 8b18c0 Recovering log #3
+2018/04/24-01:51:25.958522 8b18c0 Level-0 table #5: 159 bytes OK
+2018/04/24-01:51:25.988806 8b18c0 Delete type=0 #3
+2018/04/24-01:51:25.988852 8b18c0 Delete type=3 #2
+2018/04/24-01:51:25.989124 7f1c8c13e700 cleaning up CompactLevelThread
+2018/04/24-01:51:25.989164 7f1c8c93f700 cleaning up CompactMemTableThread

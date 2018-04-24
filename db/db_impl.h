@@ -25,6 +25,7 @@
 #include "port/thread_annotations.h"
 #include "util/timer.h"
 #include "db/version_set.h"
+#include "db/vlog_writer.h"
 
 namespace leveldb {
 #ifdef _LIBCPP_VERSION
@@ -70,7 +71,16 @@ class DBImpl : public DB {
   virtual void ClearTimer();
 
   void TEST_CompactAllLevels();
+  //zs: code; print current vlog head and tail
+  virtual void GetVlogHT(uint64_t *head, uint64_t *tail);
 
+  //zs: code; random read vlog file: lookup, range query, etc
+  Status ReadVlog(uint64_t offset, size_t n, Slice* result, char* scratch); 
+  // sequential read vlog file: garbage collection thread 
+  Status GCReadVlog(uint64_t offset, size_t n, Slice* result, char* scratch); 
+
+  //zs: code; return its internal read buffer for range query
+  char* Buffer(); 
   void TEST_CompactOnce();
   // Extra methods (for testing) that are not in the public DB interface
 
@@ -103,6 +113,10 @@ class DBImpl : public DB {
   // Peek at the last sequence;
   // REQURES: mutex_ not held
   SequenceNumber LastSequence();
+  
+  //ll: code; make this public, use it in db_iter
+ // Env* const env_;
+
 
  private:
   friend class DB;
@@ -176,7 +190,8 @@ class DBImpl : public DB {
 		  std::vector<uint64_t>* file_numbers, std::vector<std::string*>* file_level_filters);
   Status InstallCompactionResults(CompactionState* compact, const int level_to_add_new_files, std::vector<uint64_t> file_numbers, std::vector<std::string*> file_level_filters)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
-
+  //ll: code; my added functions
+  void ReadVlogSB();
   // Constant after construction
   Env* const env_;
   const InternalKeyComparator internal_comparator_;
@@ -185,6 +200,32 @@ class DBImpl : public DB {
   bool owns_info_log_;
   bool owns_cache_;
   const std::string dbname_;
+  //ll: code; add vlog file structures
+  WritableFile* vlog_write_;
+  vlog::Writer* vlog_;
+  RandomAccessFile* vlog_read_;
+  RandomAccessFile* vlog_gc_read_;
+    // whether write to lsm log or not 
+  bool write_lsm_log_;
+
+  //add vlog file read buffer for range query
+  char* buf_; 
+
+  // Signalled when background gc finishes
+  port::CondVar bg_gc_cv_;          
+
+  // Has a background gc been scheduled or is running?
+  bool bg_gc_scheduled_;
+
+  // Have we encountered a background error in paranoid mode?
+  Status bg_gc_error_;
+
+  uint64_t log_time_;
+  uint64_t mem_time_;
+  uint64_t wait_time_; 
+  uint64_t vlog_time_;
+  //------  
+
 
   // table_cache_ provides its own synchronization
   TableCache* table_cache_;

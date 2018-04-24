@@ -37,8 +37,13 @@
 #include "util/logging.h"
 #include "util/mutexlock.h"
 #include "util/timer.h"
-
+#include "include/pebblesdb/db.h"
+#include "include/pebblesdb/options.h"
 #include <iostream>
+//sz
+#include "db/vlog_writer.h"
+#include <unistd.h>
+//struct Table_Time table_time_; // maybe we need this when evaluate
 
 #ifdef TIMER_LOG
 	#define start_timer(s) timer->StartTimer(s)
@@ -193,7 +198,7 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
       dbname_(dbname),
       table_cache_(),
       db_lock_(NULL),
-      mutex_(),
+      mutex_(), //what does this do?
       shutting_down_(NULL),
       mem_(new MemTable(internal_comparator_)),
       imm_(NULL),
@@ -201,6 +206,18 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
       logfile_(),
       logfile_number_(0),
       log_(),
+      //sz init variables
+      vlog_write_(NULL),
+      vlog_(NULL),
+      vlog_read_(NULL),
+      vlog_gc_read_(NULL),
+      bg_gc_cv_(&mutex_), // for gc, but we need to figure out how to combine this with gc in pebblesdb
+      bg_gc_scheduled_(false), //may not need this, again it depends on the gc 
+      log_time_(0),
+      mem_time_(0),
+      wait_time_(0),
+      vlog_time_(0),
+      //------
       seed_(0),
       writers_mutex_(),
       writers_upper_(0),
@@ -215,7 +232,7 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
       bg_log_cv_(&mutex_),
       bg_log_occupied_(false),
       manual_compaction_(NULL),
-      manual_garbage_cutoff_(raw_options.manual_garbage_collection ?
+      manual_garbage_cutoff_(raw_options.mgc ?
                              SequenceNumber(0) : kMaxSequenceNumber),
       replay_iters_(),
       straight_reads_(0),
@@ -229,7 +246,7 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
       num_bg_compaction_threads_(1) {
   mutex_.Lock();
   mem_->Ref();
-  has_imm_.Release_Store(NULL);
+  has_imm_.Release_Store(NULL); //atomic pointer
   backup_in_progress_.Release_Store(NULL);
   env_->StartThread(&DBImpl::CompactMemTableWrapper, this);
   for (int i = 1; i <= num_bg_compaction_threads_; i++) {
@@ -245,7 +262,9 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
   timer = new Timer();
   versions_ = new VersionSet(dbname_, &options_, table_cache_,
                              &internal_comparator_, timer);
-
+  //sz init read buffer
+  buf_ = new char[512*1024];
+  //peddlesdb init array for guard and level lock
   for (unsigned i = 0; i < leveldb::config::kNumLevels; ++i) {
     guard_array_[i] = 0;
     levels_locked_[i] = false;
@@ -268,6 +287,7 @@ DBImpl::~DBImpl() {
 
   mutex_.Lock();
   shutting_down_.Release_Store(this);  // Any non-NULL value is ok
+  //w8 for background compaction;
   bg_compaction_cv_.SignalAll();
   bg_memtable_cv_.SignalAll();
   while (num_bg_threads_ > 0) {
@@ -1630,7 +1650,8 @@ Status DBImpl::Get(const ReadOptions& options,
 
       start_timer(GET_TIME_TO_CHECK_VERSION);
       s = current->Get(options, lkey, value, &stats);
-      total_files_read += current->num_files_read;
+      // Tmp comment this out since it gives errors that Idk how to fix
+      //total_files_read += current->num_files_read;
       record_timer(GET_TIME_TO_CHECK_VERSION);
 
       have_stat_update = true;
@@ -2465,6 +2486,46 @@ Status DB::Open(const Options& options, const std::string& dbname,
       impl->log_.reset(new log::Writer(lfile));
       s = impl->versions_->LogAndApply(&edit, &impl->mutex_, &impl->bg_log_cv_, &impl->bg_log_occupied_, std::vector<uint64_t>(), std::vector<std::string*>(), 1);
     }
+    //zs
+
+    WritableFile* wfile;
+    uint64_t wfile_size;
+    s = options.env->NewWritableFile(vLogFileName(dbname), &wfile);
+    if (s.ok()) {
+      impl->vlog_write_ = wfile;
+      impl->vlog_ = new vlog::Writer(wfile);
+
+      //seek to the end of the vlog file for appending 
+      s = options.env->GetFileSize(vLogFileName(dbname), &wfile_size);
+    }
+
+    RandomAccessFile* rfile;
+    RandomAccessFile* gcfile;
+    s = options.env->NewReadAccessFile(vLogFileName(dbname), &rfile, true);
+    s = options.env->NewReadAccessFile(vLogFileName(dbname), &gcfile, false);
+    if (s.ok()) {
+      impl->vlog_read_ = rfile;
+      impl->vlog_gc_read_ = gcfile;
+
+      if(wfile_size > 0) {
+        //if vlog file exists, read and init the superblock 
+        impl->ReadVlogSB();
+      } else {
+        //for a new vlog file, init and write the superblock
+        impl->vlog_->WriteVlogSB(true);
+      }
+
+      wfile->SeekToOffset(impl->vlog_->GetHead());
+
+      fprintf(stdout, "vlog size: %llu MB, ",
+              (unsigned long long)wfile_size/(1024*1024));
+      fprintf(stdout, "head: %llu, tail: %llu \n",
+              (unsigned long long)impl->vlog_->GetHead(),
+              (unsigned long long)impl->vlog_->GetTail());
+      //skip logging for now
+     // s = impl->versions_->LogAndApply(&edit, &impl->mutex_);
+    }
+    //---
     if (s.ok()) {
       impl->DeleteObsoleteFiles();
       impl->bg_compaction_cv_.Signal();
