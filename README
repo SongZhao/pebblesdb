@@ -60,3 +60,9 @@ Get up and running quickly:
     $ make
     # make install
     # ldconfig
+
+
+install lbsnappy-dev if ld doesn't find -lsnappy error found 
+
+g++ -g -O0 -rdynamic -std=c++0x -static -L out-static -I include/ -o demo demo.cc  -lpebblesdb -lpthread
+
