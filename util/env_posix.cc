@@ -597,7 +597,8 @@ class PosixEnv : public Env {
       return Status::OK();
     }
   }
-
+  // use mmap() to read, the limit is 1000, if exceed the limit,
+  // use the normal read
   virtual Status NewRandomAccessFile(const std::string& fname,
                                      RandomAccessFile** result) {
     *result = NULL;
@@ -625,11 +626,56 @@ class PosixEnv : public Env {
     }
     return s;
   }
+  //adding
+   virtual Status NewReadAccessFile(const std::string& fname,
+                                   RandomAccessFile** result, bool random) {
+    *result = NULL;
+    Status s;
+    int fd = open(fname.c_str(), O_RDONLY);
+    int ret;
 
+    if (random) {
+      //for lookup       
+      ret = posix_fadvise(fd, 0, 0, POSIX_FADV_RANDOM);
+      if (ret == 0)
+        fprintf(stdout, "fadvise random works !!! \n");
+      else
+        fprintf(stdout, "fadvise random fails  !!! \n");
+
+    } else {
+      //for garbage collection 
+      ret = posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL);
+      if (ret == 0)
+        fprintf(stdout, "fadvise sequential works !!! \n");
+      else
+        fprintf(stdout, "fadvise sequential fails  !!! \n");
+    }
+
+    if (fd < 0) {
+      s = IOError(fname, errno);
+    } else {
+      *result = new PosixRandomAccessFile(fname, fd);
+    }
+    return s;
+  }
+
+
+
+
+//----
   virtual Status NewWritableFile(const std::string& fname,
                                  WritableFile** result) {
     Status s;
-    FILE* f = fopen(fname.c_str(), "w");
+    FILE* f;     //handle file differently based on the type of the file.
+    if(fname.find("vlog") != std::string::npos && FileExists(fname))
+    {
+      f = fopen(fname.c_str(), "r+");
+    }
+    else
+    {
+      f = fopen(fname.c_str(), "w");
+    }
+
     if (f == NULL) {
       *result = NULL;
       s = IOError(fname, errno);
@@ -638,7 +684,7 @@ class PosixEnv : public Env {
     }
     return s;
   }
-
+  //NEEDTODO
   virtual Status NewConcurrentWritableFile(const std::string& fname,
                                            ConcurrentWritableFile** result) {
     Status s;
@@ -983,4 +1029,4 @@ Env* Env::Default() {
   return default_env;
 }
 
-}  // namespace leveldb
+}  // names:space leveldb

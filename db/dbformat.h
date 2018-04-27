@@ -2,15 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
-#ifndef STORAGE_LEVELDB_DB_DBFORMAT_H_
-#define STORAGE_LEVELDB_DB_DBFORMAT_H_
+#ifndef STORAGE_LEVELDB_DB_FORMAT_H_
+#define STORAGE_LEVELDB_DB_FORMAT_H_
 
 #include <stdio.h>
-#include "leveldb/comparator.h"
-#include "leveldb/db.h"
-#include "leveldb/filter_policy.h"
-#include "leveldb/slice.h"
-#include "leveldb/table_builder.h"
+#include "pebblesdb/comparator.h"
+#include "pebblesdb/db.h"
+#include "pebblesdb/filter_policy.h"
+#include "pebblesdb/slice.h"
+#include "pebblesdb/table_builder.h"
 #include "util/coding.h"
 #include "util/logging.h"
 
@@ -30,8 +30,12 @@ namespace config {
 static const int kNumLevels = 7;
 
 // Level-0 compaction is started when we hit this many files.
-static const int kL0_CompactionTrigger = 4;
+//static const int kL0_CompactionTrigger = 4;
 
+static const unsigned kL0_CompactionTrigger =4;
+static const unsigned kL0_SentinelCompactionTrigger = 2;
+static const unsigned kL0_GuardCompactionTrigger = 2;
+static const unsigned kMaxFilesPerGuardSentinel =2;
 // Soft limit on number of level-0 files.  We slow down writes at this point.
 static const int kL0_SlowdownWritesTrigger = 8;
 
@@ -44,10 +48,10 @@ static const int kL0_StopWritesTrigger = 12;
 // expensive manifest file operations.  We do not push all the way to
 // the largest level since that can generate a lot of wasted disk
 // space if the same key space is being repeatedly overwritten.
-static const int kMaxMemCompactLevel = 2;
+static const unsigned kMaxMemCompactLevel = 2;
 
 // Approximate gap in bytes between samples of data read during iteration.
-static const int kReadBytesPeriod = 1048576;
+static const unsigned kReadBytesPeriod = 1048576;
 
 }  // namespace config
 
@@ -58,7 +62,8 @@ class InternalKey;
 // data structures.
 enum ValueType {
   kTypeDeletion = 0x0,
-  kTypeValue = 0x1
+  kTypeValue = 0x1,
+  kTypeGuard = 0x2
 };
 // kValueTypeForSeek defines the ValueType that should be passed when
 // constructing a ParsedInternalKey object for seeking to a particular
@@ -80,7 +85,10 @@ struct ParsedInternalKey {
   SequenceNumber sequence;
   ValueType type;
 
-  ParsedInternalKey() { }  // Intentionally left uninitialized (for speed)
+  ParsedInternalKey() 
+	: user_key(),
+	sequence(),
+	type(){ }  // Intentionally left uninitialized (for speed)
   ParsedInternalKey(const Slice& u, const SequenceNumber& seq, ValueType t)
       : user_key(u), sequence(seq), type(t) { }
   std::string DebugString() const;
@@ -123,6 +131,11 @@ class InternalKeyComparator : public Comparator {
   const Comparator* user_comparator_;
  public:
   explicit InternalKeyComparator(const Comparator* c) : user_comparator_(c) { }
+  InternalKeyComparator(const InternalKeyComparator& other)
+   : user_comparator_(other.user_comparator_) {}
+
+
+
   virtual const char* Name() const;
   virtual int Compare(const Slice& a, const Slice& b) const;
   virtual void FindShortestSeparator(
@@ -133,12 +146,20 @@ class InternalKeyComparator : public Comparator {
   const Comparator* user_comparator() const { return user_comparator_; }
 
   int Compare(const InternalKey& a, const InternalKey& b) const;
+  InternalKeyComparator& operator = (const InternalKeyComparator& rhs)
+  { user_comparator_ = rhs.user_comparator_; return *this; }
+
+
 };
 
 // Filter policy wrapper that converts from internal keys to user keys
 class InternalFilterPolicy : public FilterPolicy {
  private:
   const FilterPolicy* const user_policy_;
+  InternalFilterPolicy(const InternalFilterPolicy&);
+  InternalFilterPolicy& operator = (const InternalFilterPolicy&);
+
+
  public:
   explicit InternalFilterPolicy(const FilterPolicy* p) : user_policy_(p) { }
   virtual const char* Name() const;
@@ -153,11 +174,11 @@ class InternalKey {
  private:
   std::string rep_;
  public:
-  InternalKey() { }   // Leave rep_ as empty to indicate it is invalid
-  InternalKey(const Slice& user_key, SequenceNumber s, ValueType t) {
-    AppendInternalKey(&rep_, ParsedInternalKey(user_key, s, t));
+  InternalKey(): rep_() { }   // Leave rep_ as empty to indicate it is invalid
+  InternalKey(const Slice& _user_key, SequenceNumber s, ValueType t) : rep_() {
+    AppendInternalKey(&rep_, ParsedInternalKey(_user_key, s, t));
   }
-
+  InternalKey(const InternalKey& other) : rep_(other.rep_) {}
   void DecodeFrom(const Slice& s) { rep_.assign(s.data(), s.size()); }
   Slice Encode() const {
     assert(!rep_.empty());
@@ -172,7 +193,8 @@ class InternalKey {
   }
 
   void Clear() { rep_.clear(); }
-
+  InternalKey& operator = (const InternalKey& rhs) 
+  { if (this != &rhs) { rep_ = rhs.rep_; } return *this; }
   std::string DebugString() const;
 };
 

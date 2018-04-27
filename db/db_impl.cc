@@ -37,8 +37,8 @@
 #include "util/logging.h"
 #include "util/mutexlock.h"
 #include "util/timer.h"
-#include "include/pebblesdb/db.h"
-#include "include/pebblesdb/options.h"
+//#include "include/pebblesdb/db.h"
+//#include "include/pebblesdb/options.h"
 #include <iostream>
 //sz
 #include "db/vlog_writer.h"
@@ -232,8 +232,7 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
       bg_log_cv_(&mutex_),
       bg_log_occupied_(false),
       manual_compaction_(NULL),
-      manual_garbage_cutoff_(raw_options.mgc ?
-                             SequenceNumber(0) : kMaxSequenceNumber),
+      //manual_garbage_cutoff_(raw_options.mgc ? SequenceNumber(0) : kMaxSequenceNumber),
       replay_iters_(),
       straight_reads_(0),
       versions_(),
@@ -1651,7 +1650,7 @@ Status DBImpl::Get(const ReadOptions& options,
       start_timer(GET_TIME_TO_CHECK_VERSION);
       s = current->Get(options, lkey, value, &stats);
       // Tmp comment this out since it gives errors that Idk how to fix
-      //total_files_read += current->num_files_read;
+      total_files_read += current->num_files_read;
       record_timer(GET_TIME_TO_CHECK_VERSION);
 
       have_stat_update = true;

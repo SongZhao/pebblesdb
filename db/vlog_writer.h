@@ -7,10 +7,10 @@
 
 #include <stdint.h>
 #include "db/vlog_format.h"
-#include "leveldb/slice.h"
-#include "leveldb/status.h"
+#include "pebblesdb/slice.h"
+#include "pebblesdb/status.h"
 
-#include "leveldb/write_batch.h"
+#include "pebblesdb/write_batch.h"
 
 #include "db/dbformat.h"
 
